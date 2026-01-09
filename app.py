@@ -40,16 +40,25 @@ user_input = st.text_area("რა ხდება დღეს?", placeholder="�
 
 if st.button("შენახვა"):
     if user_input:
-        with st.spinner('Gemini აანალიზებს...'):
-            prompt = f"Determine the mood in Georgian: {user_input}"
-            response = model.generate_content(prompt)
-            sentiment = response.text.strip()
-            now = datetime.now()
-            new_entry = pd.DataFrame([[now.strftime("%Y-%m-%d"), now.strftime("%H:%M"), user_input, sentiment]], 
-                                     columns=["თარიღი", "საათი", "ჩანაწერი", "განწყობა"])
-            new_entry.to_csv(DB_FILE, mode='a', header=False, index=False)
-            st.success("შენახულია!")
-            st.rerun()
+        with st.spinner('Gemini ამუშავებს...'):
+            try:
+                # მოდელის გამოძახება
+                prompt = f"Determine the mood in Georgian (one word): {user_input}"
+                response = model.generate_content(prompt)
+                
+                # თუ Gemini-მ ვერ უპასუხა, დავაწეროთ "უცნობი"
+                sentiment = response.text.strip() if response.text else "ნეიტრალური"
+                
+                now = datetime.now()
+                new_entry = pd.DataFrame([[now.strftime("%Y-%m-%d"), now.strftime("%H:%M"), user_input, sentiment]], 
+                                         columns=["თარიღი", "საათი", "ჩანაწერი", "განწყობა"])
+                
+                # ფაილში ჩაწერა
+                new_entry.to_csv(DB_FILE, mode='a', header=False, index=False)
+                st.success("ჩანაწერი შენახულია!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"API შეცდომა: {e}. სცადეთ მოგვიანებით.")
 
 st.markdown("---")
 st.subheader("📜 ისტორია")
