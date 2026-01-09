@@ -9,7 +9,7 @@ API_KEY = "AIzaSyDrFdRWcnVeyZ04Y5IWSoiMpIVU2RFXxDk"
 MY_PASSWORD = "111979" # <--- შეცვალე ეს შენი სასურველი პაროლით!
 
 genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
 st.set_page_config(page_title="დაცული დღიური", layout="centered")
 
