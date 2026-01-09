@@ -10,15 +10,10 @@ from PIL import Image
 API_KEY = "AIzaSyDrFdRWcnVeyZ04Y5IWSoiMpIVU2RFXxDk"
 genai.configure(api_key=API_KEY)
 
-# მომხმარებლების ბაზა (მომხმარებელი: პაროლი)
-USERS = {
-    "giorgi": "1234",
-    "ბაიკო": "1234",
-    "ანა": "1234",
-    "admin": "0000"
-}
+# მომხმარებლების ბაზა
+USERS = {"giorgi": "1234", "admin": "0000"}
 
-st.set_page_config(page_title="ჩემი მრავალფუნქციური დღიური", layout="centered")
+st.set_page_config(page_title="AI Smart Diary", layout="centered")
 
 # --- ავტორიზაცია ---
 if "user" not in st.session_state:
@@ -36,57 +31,78 @@ if st.session_state["user"] is None:
             st.error("არასწორი მონაცემები!")
     st.stop()
 
-# --- აპლიკაციის შიგთავსი ---
 current_user = st.session_state["user"]
-st.sidebar.write(f"👤 მომხმარებელი: **{current_user}**")
-if st.sidebar.button("გამოსვლა"):
-    st.session_state["user"] = None
-    st.rerun()
+st.title(f"📝 {current_user}-ს ჭკვიანი დღიური")
 
-st.title(f"📝 {current_user}-ს დღიური")
+# 1. ხმოვანი და ტექსტური შეყვანა
+st.subheader("🎤 ჩაწერე ან ისაუბრე")
+text_from_speech = speech_to_text(language='ka', start_prompt="ჩაწერა", key='recorder')
+user_input = st.text_area("რა ხდება დღეს?", value=text_from_speech if text_from_speech else "", height=150)
 
-# ფაილის სახელი თითოეული მომხმარებლისთვის ინდივიდუალურია
+# 2. სურათის ატვირთვა
+uploaded_file = st.file_uploader("დაამატე ფოტო", type=['jpg', 'png', 'jpeg'])
+
+# 3. შენახვის ლოგიკა
 DB_FILE = f"diary_{current_user}.csv"
 if not os.path.exists(DB_FILE):
-    pd.DataFrame(columns=["თარიღი", "საათი", "ჩანაწერი", "განწყობა"]).to_csv(DB_FILE, index=False)
+    pd.DataFrame(columns=["თარიღი", "საათი", "ჩანაწერი", "განწყობა", "AI_კომენტარი"]).to_csv(DB_FILE, index=False)
 
-# 1. ხმოვანი ნაწილი
-st.subheader("🎤 ისაუბრე")
-text_from_speech = speech_to_text(language='ka', start_prompt="ჩაწერა", key='recorder')
-
-# 2. ტექსტური ნაწილი
-user_input = st.text_area("რა ხდება დღეს?", value=text_from_speech if text_from_speech else "")
-
-# 3. სურათის ატვირთვა
-uploaded_file = st.file_uploader("დაამატე ფოტო (მცირე რეზოლუციით)", type=['jpg', 'png', 'jpeg'])
-if uploaded_file:
-    img = Image.open(uploaded_file)
-    # რეზოლუციის შემცირება საჩვენებლად
-    img.thumbnail((300, 300))
-    st.image(img, caption="ატვირთული ფოტო")
-
-# 4. შენახვა
-if st.button("💾 ჩაწერა დღიურში"):
+if st.button("💾 შენახვა და AI ანალიზი"):
     if user_input:
-        sentiment = "..."
-        try:
-            # Gemini-ს მოდელის ტესტირება
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            response = model.generate_content(f"Analyze mood in Georgian: {user_input}")
-            sentiment = response.text.strip()
-        except:
-            sentiment = "შენახულია AI-ს გარეშე"
+        with st.spinner('Gemini ფიქრობს...'):
+            sentiment = "ნეიტრალური"
+            ai_comment = "კითხვა არ დასმულა"
+            
+            try:
+                # მოდელის კონფიგურაცია
+                model = genai.GenerativeModel('gemini-1.5-flash-latest')
+                
+                # ინსტრუქცია Gemini-სთვის
+                prompt = f"""
+                შენ ხარ დღიურის ასისტენტი. გააანალიზე ეს ტექსტი: "{user_input}"
+                1. განსაზღვრე განწყობა ერთი სიტყვით (ქართულად).
+                2. თუ ტექსტში დასმულია კითხვა, უპასუხე ამომწურავად და საინტერესოდ. 
+                თუ კითხვა არ არის, დაწერე მოკლე გამამხნევებელი კომენტარი.
+                პასუხი დააბრუნე ფორმატით: 
+                განწყობა: [აქ ჩაწერე]
+                კომენტარი: [აქ ჩაწერე]
+                """
+                
+                response = model.generate_content(prompt)
+                full_response = response.text
+                
+                # პასუხის დანაწევრება
+                if "განწყობა:" in full_response and "კომენტარი:" in full_response:
+                    sentiment = full_response.split("განწყობა:")[1].split("კომენტარი:")[0].strip()
+                    ai_comment = full_response.split("კომენტარი:")[1].strip()
+                else:
+                    ai_comment = full_response
 
-        now = datetime.now()
-        new_entry = pd.DataFrame([[now.strftime("%Y-%m-%d"), now.strftime("%H:%M"), user_input, sentiment]], 
-                                 columns=["თარიღი", "საათი", "ჩანაწერი", "განწყობა"])
-        new_entry.to_csv(DB_FILE, mode='a', header=False, index=False)
-        st.success("წარმატებით შეინახა!")
-        st.balloons()
-        st.rerun()
+            except Exception as e:
+                st.error(f"AI შეცდომა: {e}")
+                sentiment = "AI შეცდომა"
+                ai_comment = "ვერ მოხერხდა პასუხის გენერაცია"
+
+            # ბაზაში ჩაწერა
+            now = datetime.now()
+            new_entry = pd.DataFrame([[
+                now.strftime("%Y-%m-%d"), 
+                now.strftime("%H:%M"), 
+                user_input, 
+                sentiment, 
+                ai_comment
+            ]], columns=["თარიღი", "საათი", "ჩანაწერი", "განწყობა", "AI_კომენტარი"])
+            
+            new_entry.to_csv(DB_FILE, mode='a', header=False, index=False)
+            st.success("ჩანაწერი შენახულია!")
+            st.rerun()
 
 st.markdown("---")
-st.subheader("📜 ჩემი ჩანაწერები")
+st.subheader("📜 ჩანაწერების ისტორია")
 if os.path.exists(DB_FILE):
     df = pd.read_csv(DB_FILE)
-    st.dataframe(df.sort_values(by=["თარიღი", "საათი"], ascending=False), use_container_width=True, hide_index=True)
+    if not df.empty:
+        for index, row in df.sort_values(by=["თარიღი", "საათი"], ascending=False).iterrows():
+            with st.expander(f"📅 {row['თარიღი']} | 🕒 {row['საათი']} | {row['განწყობა']}"):
+                st.write(f"**ჩანაწერი:** {row['ჩანაწერი']}")
+                st.info(f"🤖 **Gemini-ს პასუხი:** {row['AI_კომენტარი']}")
