@@ -5,20 +5,21 @@ import pandas as pd
 import os
 
 # --- კონფიგურაცია ---
-API_KEY = "AIzaSyCuPDNEeQF9kto5ebj5vXOHoz-NT4105hI"
-MY_PASSWORD = "111979" # <--- შეცვალე ეს შენი სასურველი პაროლით!
+# ჩასვი შენი API გასაღები აქ
+API_KEY = "AIzaSyDrFdRWcnVeyZ04Y5IWSoiMpIVU2RFXxDk"
+MY_PASSWORD = "შენი_პაროლი_აქ" # <--- შეცვალე ეს!
 
+# Gemini-ს გამართვა
 genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel(model_name="gemini-1.5-pro")
 
-st.set_page_config(page_title="დაცული დღიური", layout="centered")
+st.set_page_config(page_title="ჩემი დღიური", layout="centered")
 
-# --- პაროლის შემოწმება ---
+# --- პაროლის სისტემა ---
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
 if not st.session_state["authenticated"]:
-    st.title("🔐 დაცული დღიური")
+    st.title("🔐 შესვლა")
     pwd = st.text_input("შეიყვანეთ პაროლი:", type="password")
     if st.button("შესვლა"):
         if pwd == MY_PASSWORD:
@@ -28,41 +29,60 @@ if not st.session_state["authenticated"]:
             st.error("პაროლი არასწორია!")
     st.stop()
 
-# --- აპლიკაციის ძირითადი ნაწილი (მხოლოდ სწორი პაროლის შემდეგ) ---
+# --- აპლიკაციის ლოგიკა ---
 st.title("📝 ჩემი პერსონალური დღიური")
+
 DB_FILE = "diary_db.csv"
 
+# ბაზის შემოწმება
 if not os.path.exists(DB_FILE):
     df = pd.DataFrame(columns=["თარიღი", "საათი", "ჩანაწერი", "განწყობა"])
     df.to_csv(DB_FILE, index=False)
 
 user_input = st.text_area("რა ხდება დღეს?", placeholder="დაწერე აქ...")
 
-if st.button("შენახვა"):
+if st.button("💾 შენახვა"):
     if user_input:
-        with st.spinner('Gemini ამუშავებს...'):
-            try:
-                # მოდელის გამოძახება
-                prompt = f"Determine the mood in Georgian (one word): {user_input}"
-                response = model.generate_content(prompt)
-                
-                # თუ Gemini-მ ვერ უპასუხა, დავაწეროთ "უცნობი"
-                sentiment = response.text.strip() if response.text else "ნეიტრალური"
-                
-                now = datetime.now()
-                new_entry = pd.DataFrame([[now.strftime("%Y-%m-%d"), now.strftime("%H:%M"), user_input, sentiment]], 
-                                         columns=["თარიღი", "საათი", "ჩანაწერი", "განწყობა"])
-                
-                # ფაილში ჩაწერა
-                new_entry.to_csv(DB_FILE, mode='a', header=False, index=False)
-                st.success("ჩანაწერი შენახულია!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"API შეცდომა: {e}. სცადეთ მოგვიანებით.")
+        sentiment = "Gemini-ს გარეშე" # საწყისი მნიშვნელობა
+        
+        # ვცდილობთ Gemini-ს გამოყენებას
+        try:
+            # ვტესტავთ ყველაზე მარტივ მოდელს
+            model = genai.GenerativeModel('gemini-pro') 
+            response = model.generate_content(f"Determine mood in one Georgian word: {user_input}")
+            if response.text:
+                sentiment = response.text.strip()
+        except Exception:
+            # თუ Gemini-მ აურია, პროგრამა არ გაითიშება
+            sentiment = "შენახულია (AI-ს გარეშე)"
+
+        # მონაცემების მომზადება
+        now = datetime.now()
+        date_str = now.strftime("%Y-%m-%d")
+        time_str = now.strftime("%H:%M")
+        
+        new_entry = pd.DataFrame([[date_str, time_str, user_input, sentiment]], 
+                                 columns=["თარიღი", "საათი", "ჩანაწერი", "განწყობა"])
+        
+        # შენახვა ფაილში
+        new_entry.to_csv(DB_FILE, mode='a', header=False, index=False)
+        st.success("ჩანაწერი წარმატებით შეინახა!")
+        st.rerun()
+    else:
+        st.warning("გთხოვთ, შეიყვანოთ ტექსტი.")
 
 st.markdown("---")
-st.subheader("📜 ისტორია")
+
+# ისტორიის ჩვენება
+st.subheader("📜 წინა ჩანაწერები")
 if os.path.exists(DB_FILE):
-    history_df = pd.read_csv(DB_FILE)
-    if not history_df.empty:
-        st.dataframe(history_df.sort_values(by=["თარიღი", "საათი"], ascending=False), use_container_width=True)
+    try:
+        history_df = pd.read_csv(DB_FILE)
+        if not history_df.empty:
+            # უახლესი ჩანაწერები ზემოთ
+            history_df = history_df.sort_values(by=["თარიღი", "საათი"], ascending=False)
+            st.dataframe(history_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("ჩანაწერები ჯერ არ არის.")
+    except Exception:
+        st.error("მონაცემების წაკითხვის შეცდომა.")
