@@ -5,11 +5,11 @@ import pandas as pd
 import os
 
 # --- კონფიგურაცია ---
-API_KEY = "AIzaSyDrFdRWcnVeyZ04Y5IWSoiMpIVU2RFXxDk"
+API_KEY = "AIzaSyCuPDNEeQF9kto5ebj5vXOHoz-NT4105hI"
 MY_PASSWORD = "111979" # <--- შეცვალე ეს შენი სასურველი პაროლით!
 
 genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash-latest')
+model = genai.GenerativeModel(model_name="gemini-1.5-pro")
 
 st.set_page_config(page_title="დაცული დღიური", layout="centered")
 
