@@ -6,7 +6,7 @@ import os
 
 # --- კონფიგურაცია ---
 API_KEY = "AIzaSyDrFdRWcnVeyZ04Y5IWSoiMpIVU2RFXxDk"
-MY_PASSWORD = "შენი_პაროლი_აქ" # <--- შეცვალე ეს შენი სასურველი პაროლით!
+MY_PASSWORD = "111979" # <--- შეცვალე ეს შენი სასურველი პაროლით!
 
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
