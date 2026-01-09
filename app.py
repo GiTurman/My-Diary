@@ -3,16 +3,16 @@ import google.generativeai as genai
 from datetime import datetime
 import pandas as pd
 import os
+from streamlit_mic_recorder import speech_to_text
 
 # --- კონფიგურაცია ---
-# ჩასვი შენი API გასაღები აქ
 API_KEY = "AIzaSyDrFdRWcnVeyZ04Y5IWSoiMpIVU2RFXxDk"
-MY_PASSWORD = "შენი_პაროლი_აქ" # <--- შეცვალე ეს!
+MY_PASSWORD = "1" 
 
-# Gemini-ს გამართვა
+# Gemini-ს გამართვა (ვუთითებთ ვერსიას სტაბილურობისთვის)
 genai.configure(api_key=API_KEY)
 
-st.set_page_config(page_title="ჩემი დღიური", layout="centered")
+st.set_page_config(page_title="ჭკვიანი დღიური", layout="centered")
 
 # --- პაროლის სისტემა ---
 if "authenticated" not in st.session_state:
@@ -29,60 +29,56 @@ if not st.session_state["authenticated"]:
             st.error("პაროლი არასწორია!")
     st.stop()
 
-# --- აპლიკაციის ლოგიკა ---
+# --- აპლიკაცია ---
 st.title("📝 ჩემი პერსონალური დღიური")
 
+# ხმოვანი ჩანაწერი (ქართული ენის მხარდაჭერით)
+st.subheader("🎤 ხმოვანი ჩანაწერი")
+text_from_speech = speech_to_text(
+    language='ka',
+    start_prompt="დააჭირე სალაპარაკოდ",
+    stop_prompt="შეჩერება",
+    key='recorder'
+)
+
+# თუ ხმა ამოიცნო, ჩაწეროს ტექსტის ველში
+if text_from_speech:
+    st.info(f"ამოცნობილი ტექსტი: {text_from_speech}")
+
+user_input = st.text_area("რა ხდება დღეს?", value=text_from_speech if text_from_speech else "", placeholder="დაწერე ან ისაუბრე...")
+
 DB_FILE = "diary_db.csv"
-
-# ბაზის შემოწმება
 if not os.path.exists(DB_FILE):
-    df = pd.DataFrame(columns=["თარიღი", "საათი", "ჩანაწერი", "განწყობა"])
-    df.to_csv(DB_FILE, index=False)
-
-user_input = st.text_area("რა ხდება დღეს?", placeholder="დაწერე აქ...")
+    pd.DataFrame(columns=["თარიღი", "საათი", "ჩანაწერი", "განწყობა"]).to_csv(DB_FILE, index=False)
 
 if st.button("💾 შენახვა"):
     if user_input:
-        sentiment = "Gemini-ს გარეშე" # საწყისი მნიშვნელობა
-        
-        # ვცდილობთ Gemini-ს გამოყენებას
-        try:
-            # ვტესტავთ ყველაზე მარტივ მოდელს
-            model = genai.GenerativeModel('gemini-pro') 
-            response = model.generate_content(f"Determine mood in one Georgian word: {user_input}")
-            if response.text:
-                sentiment = response.text.strip()
-        except Exception:
-            # თუ Gemini-მ აურია, პროგრამა არ გაითიშება
-            sentiment = "შენახულია (AI-ს გარეშე)"
+        with st.spinner('Gemini აანალიზებს...'):
+            sentiment = "უცნობი"
+            try:
+                # ვცდით სხვადასხვა მოდელს რიგრიგობით
+                for model_name in ['gemini-1.5-flash', 'gemini-1.0-pro']:
+                    try:
+                        model = genai.GenerativeModel(model_name)
+                        response = model.generate_content(f"Describe the mood in one Georgian word: {user_input}")
+                        if response.text:
+                            sentiment = response.text.strip()
+                            break 
+                    except:
+                        continue
+            except Exception:
+                sentiment = "AI შეცდომა"
 
-        # მონაცემების მომზადება
-        now = datetime.now()
-        date_str = now.strftime("%Y-%m-%d")
-        time_str = now.strftime("%H:%M")
-        
-        new_entry = pd.DataFrame([[date_str, time_str, user_input, sentiment]], 
-                                 columns=["თარიღი", "საათი", "ჩანაწერი", "განწყობა"])
-        
-        # შენახვა ფაილში
-        new_entry.to_csv(DB_FILE, mode='a', header=False, index=False)
-        st.success("ჩანაწერი წარმატებით შეინახა!")
-        st.rerun()
-    else:
-        st.warning("გთხოვთ, შეიყვანოთ ტექსტი.")
+            now = datetime.now()
+            new_entry = pd.DataFrame([[now.strftime("%Y-%m-%d"), now.strftime("%H:%M"), user_input, sentiment]], 
+                                     columns=["თარიღი", "საათი", "ჩანაწერი", "განწყობა"])
+            new_entry.to_csv(DB_FILE, mode='a', header=False, index=False)
+            st.success(f"შენახულია! განწყობა: {sentiment}")
+            st.rerun()
 
 st.markdown("---")
-
-# ისტორიის ჩვენება
-st.subheader("📜 წინა ჩანაწერები")
+st.subheader("📜 ჩანაწერები")
 if os.path.exists(DB_FILE):
-    try:
-        history_df = pd.read_csv(DB_FILE)
-        if not history_df.empty:
-            # უახლესი ჩანაწერები ზემოთ
-            history_df = history_df.sort_values(by=["თარიღი", "საათი"], ascending=False)
-            st.dataframe(history_df, use_container_width=True, hide_index=True)
-        else:
-            st.info("ჩანაწერები ჯერ არ არის.")
-    except Exception:
-        st.error("მონაცემების წაკითხვის შეცდომა.")
+    df = pd.read_csv(DB_FILE)
+    if not df.empty:
+        st.dataframe(df.sort_values(by=["თარიღი", "საათი"], ascending=False), use_container_width=True, hide_index=True)
